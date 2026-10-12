@@ -224,6 +224,13 @@ class ConnectAuthHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(response_data, indent=2).encode('utf-8'))
             return
 
+        # SPA Routing: Serve index.html for /oauth/callback routes
+        import urllib.parse
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith('/oauth/callback') or parsed.path == '/callback':
+            self.path = '/index.html'
+            return super().do_GET()
+
         return super().do_GET()
 
 if __name__ == "__main__":

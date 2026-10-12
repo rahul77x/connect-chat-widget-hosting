@@ -249,8 +249,8 @@ class IdcOidcAuthClient {
 
       sessionStorage.setItem(STORAGE_KEY_USER, JSON.stringify(this.user));
 
-      // Clean query params from URL (remove ?code=...&state=...)
-      window.history.replaceState({}, document.title, window.location.pathname);
+      // Clean query params from URL (remove ?code=...&state=... and return to root)
+      window.history.replaceState({}, document.title, '/');
       console.log('[IDC OIDC] Successfully authenticated as:', displayName);
     } catch (err) {
       console.error('[IDC OIDC] Token exchange failed:', err);
