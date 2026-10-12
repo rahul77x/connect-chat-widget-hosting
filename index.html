@@ -22,10 +22,30 @@
     />
   </main>
 
-  <!-- Top-Right Required Badge -->
-  <div class="prototype-dev-badge" id="prototypeDevBadge" title="AI Chatbot Prototype Environment">
-    <span class="badge-pulse"></span>
-    <span class="badge-text">AI-Chatbot-Prototype-dev</span>
+  <!-- Top-Right Required Badge & OIDC Auth Bar -->
+  <div class="top-right-bar" id="topRightBar">
+    <!-- OIDC Authentication Pill -->
+    <div class="oidc-auth-badge" id="oidcAuthBadge">
+      <button class="oidc-auth-btn" id="topOidcLoginBtn" title="Click to Authenticate via OIDC">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+        <span>Sign in (OIDC)</span>
+      </button>
+
+      <div class="oidc-logged-in-wrap hidden" id="topOidcProfile">
+        <span class="oidc-indicator"></span>
+        <span class="oidc-user-label" id="topOidcUserEmail">Authenticated</span>
+        <button class="oidc-logout-icon" id="topOidcLogoutBtn" title="Log out">&times;</button>
+      </div>
+    </div>
+
+    <!-- Required Prototype Dev Badge -->
+    <div class="prototype-dev-badge" id="prototypeDevBadge" title="AI Chatbot Prototype Environment">
+      <span class="badge-pulse"></span>
+      <span class="badge-text">AI-Chatbot-Prototype-dev</span>
+    </div>
   </div>
 
   <!-- Top-Left Floating Dev & Customizer Controls -->
@@ -127,14 +147,41 @@
         </div>
       </div>
 
-      <!-- Tab 2: Local Authentication -->
+      <!-- Tab 2: OIDC & Local Authentication -->
       <div class="tab-content" id="tab-auth">
-        <p class="tab-desc">Test how authentication & session tokens are initiated from your local workspace.</p>
+        <p class="tab-desc">Authenticate using your corporate OIDC Issuer to bypass explicit deny SCP policies.</p>
+
+        <!-- OIDC Provider Status Card -->
+        <div class="auth-card oidc-card">
+          <div class="auth-card-header">
+            <span class="auth-status-dot" id="oidcCardDot"></span>
+            <strong>OIDC Provider Configuration (.env)</strong>
+          </div>
+          <div class="auth-card-body">
+            <div class="auth-item">
+              <span class="auth-method">ISSUER</span>
+              <code id="displayOidcIssuer">Loading from .env...</code>
+            </div>
+            <div class="auth-item">
+              <span class="auth-method">CLIENT_ID</span>
+              <code id="displayOidcClientId">Loading from .env...</code>
+            </div>
+            <div class="auth-item">
+              <span class="auth-method">STATUS</span>
+              <span id="displayOidcStatus" class="auth-status-text">Not Authenticated</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary" id="drawerOidcLoginBtn">Sign in with OIDC (PKCE)</button>
+          <button class="btn btn-secondary" id="drawerOidcMockBtn">Simulate Mock OIDC</button>
+        </div>
 
         <div class="auth-card">
           <div class="auth-card-header">
             <span class="auth-status-dot connected"></span>
-            <strong>Local Server Auth Endpoints</strong>
+            <strong>Local Connect Auth Endpoints</strong>
           </div>
           <div class="auth-card-body">
             <div class="auth-item">
@@ -145,29 +192,30 @@
             <div class="auth-item">
               <span class="auth-method">POST</span>
               <code>/api/start-chat</code>
-              <p>Calls AWS SDK <code>StartChatContact</code> with IAM credentials.</p>
+              <p>Calls AWS SDK <code>StartChatContact</code> proxy.</p>
             </div>
           </div>
         </div>
 
-        <div class="control-group">
-          <label for="authCustomerName">Simulated Customer Name:</label>
-          <input type="text" id="authCustomerName" class="form-input" value="Rahul Sharma">
-        </div>
-
-        <div class="control-group">
-          <label for="authCustomerId">Customer ID / Account No:</label>
-          <input type="text" id="authCustomerId" class="form-input" value="BOI-CUST-984210">
+        <div class="control-row">
+          <div class="control-group half">
+            <label for="authCustomerName">Customer Name:</label>
+            <input type="text" id="authCustomerName" class="form-input" value="Rahul Sharma">
+          </div>
+          <div class="control-group half">
+            <label for="authCustomerId">Customer ID:</label>
+            <input type="text" id="authCustomerId" class="form-input" value="BOI-CUST-984210">
+          </div>
         </div>
 
         <div class="action-buttons">
-          <button class="btn btn-primary" id="testAuthTokenBtn">Test Generate Auth JWT</button>
-          <button class="btn btn-secondary" id="testStartChatBtn">Test StartChatContact</button>
+          <button class="btn btn-primary" id="testAuthTokenBtn">Generate Connect JWT</button>
+          <button class="btn btn-secondary" id="testStartChatBtn">Test StartChat API</button>
         </div>
 
         <div class="auth-result-box" id="authResultBox">
-          <div class="result-title">Response Output:</div>
-          <pre id="authResultOutput">// Click "Test Generate Auth JWT" above to test...</pre>
+          <div class="result-title">Authentication Tokens & Claims:</div>
+          <pre id="authResultOutput">// Sign in with OIDC or generate a token to inspect payload...</pre>
         </div>
       </div>
 
@@ -414,10 +462,25 @@
           buttonBackgroundColor: '#004085'
         }
       });
+
+      // 🔐 Pass Authenticated OIDC Token to Amazon Connect
+      amazon_connect('authenticate', function(callback) {
+        if (window.OidcAuth && window.OidcAuth.getIdToken()) {
+          console.log('[Connect] Passing verified OIDC id_token to Amazon Connect');
+          callback(window.OidcAuth.getIdToken());
+        } else {
+          console.log('[Connect] OIDC token not present; requesting token from /api/chat-auth');
+          fetch('/api/chat-auth')
+            .then(function(r) { return r.json(); })
+            .then(function(d) { callback(d.jwtToken); })
+            .catch(function(e) { console.error('Auth callback failed:', e); });
+        }
+      });
     }
   </script>
 
   <!-- Prototype Helper Scripts -->
+  <script src="oidc-auth.js"></script>
   <script src="amazon-connect-config.js"></script>
   <script src="app.js"></script>
 </body>

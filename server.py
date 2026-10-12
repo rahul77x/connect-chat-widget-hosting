@@ -21,6 +21,26 @@ import hashlib
 import base64
 import uuid
 
+# Load .env file automatically on startup
+def load_env_file(filepath=None):
+    if filepath is None:
+        filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, val = line.split("=", 1)
+                        key = key.strip()
+                        val = val.strip().strip('"').strip("'")
+                        if key not in os.environ:
+                            os.environ[key] = val
+        except Exception as e:
+            print(f"Warning: could not read .env: {e}")
+
+load_env_file()
+
 PORT = int(os.environ.get("PORT", 3000))
 JWT_SECRET = os.environ.get("CONNECT_JWT_SECRET", "prototype-amazon-connect-secret-key-2026").encode("utf-8")
 STATIC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -116,6 +136,26 @@ class ConnectAuthHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if self.path == '/api/config':
+            config_data = {
+                "oidc": {
+                    "issuer": os.environ.get("VITE_OIDC_ISSUER", ""),
+                    "clientId": os.environ.get("VITE_OIDC_CLIENT_ID", ""),
+                    "redirectUri": os.environ.get("VITE_OIDC_REDIRECT_URI", f"http://localhost:{PORT}"),
+                    "scopes": os.environ.get("VITE_OIDC_SCOPES", "openid email profile")
+                },
+                "connect": {
+                    "snippetUrl": os.environ.get("CONNECT_SNIPPET_URL", ""),
+                    "snippetId": os.environ.get("CONNECT_SNIPPET_ID", ""),
+                    "region": os.environ.get("AWS_REGION", "us-east-1")
+                }
+            }
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(config_data, indent=2).encode('utf-8'))
+            return
+
         if self.path == '/api/chat-auth':
             result = create_connect_jwt({})
             self.send_response(200)
@@ -132,6 +172,7 @@ class ConnectAuthHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
 if __name__ == "__main__":
+    socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", PORT), ConnectAuthHandler) as httpd:
         print("=============================================================")
         print(f"[*] Amazon Connect Chat Widget Local Server Running (Python)")

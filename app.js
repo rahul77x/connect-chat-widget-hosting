@@ -439,6 +439,104 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('amazon-connect-container').appendChild(script);
   }
 
+  // ==========================================================================
+  // OIDC Authentication Handlers
+  // ==========================================================================
+  const topOidcLoginBtn = document.getElementById('topOidcLoginBtn');
+  const topOidcProfile = document.getElementById('topOidcProfile');
+  const topOidcUserEmail = document.getElementById('topOidcUserEmail');
+  const topOidcLogoutBtn = document.getElementById('topOidcLogoutBtn');
+  const drawerOidcLoginBtn = document.getElementById('drawerOidcLoginBtn');
+  const drawerOidcMockBtn = document.getElementById('drawerOidcMockBtn');
+  const displayOidcIssuer = document.getElementById('displayOidcIssuer');
+  const displayOidcClientId = document.getElementById('displayOidcClientId');
+  const displayOidcStatus = document.getElementById('displayOidcStatus');
+  const oidcCardDot = document.getElementById('oidcCardDot');
+
+  function updateOidcUI(isAuthenticated, user) {
+    if (isAuthenticated && user) {
+      if (topOidcLoginBtn) topOidcLoginBtn.classList.add('hidden');
+      if (topOidcProfile) topOidcProfile.classList.remove('hidden');
+      if (topOidcUserEmail) topOidcUserEmail.innerText = user.profile.email || user.profile.name;
+      
+      if (displayOidcStatus) {
+        displayOidcStatus.innerText = 'Authenticated';
+        displayOidcStatus.style.color = '#10b981';
+      }
+      if (oidcCardDot) {
+        oidcCardDot.className = 'auth-status-dot connected';
+      }
+      if (drawerOidcLoginBtn) drawerOidcLoginBtn.innerText = 'Signed In (Click to Re-login)';
+
+      // Update widget banner
+      authBanner.classList.remove('hidden');
+      authBannerText.innerHTML = `OIDC Verified: <strong>${escapeHtml(user.profile.name || user.profile.email)}</strong>`;
+
+      // Display token in result box
+      authResultOutput.innerText = JSON.stringify({
+        status: 'OIDC Authenticated',
+        user: user.profile,
+        idTokenPreview: user.idToken.substring(0, 40) + '...',
+        expiresAt: new Date(user.expiresAt).toLocaleTimeString()
+      }, null, 2);
+    } else {
+      if (topOidcLoginBtn) topOidcLoginBtn.classList.remove('hidden');
+      if (topOidcProfile) topOidcProfile.classList.add('hidden');
+      
+      if (displayOidcStatus) {
+        displayOidcStatus.innerText = 'Not Authenticated';
+        displayOidcStatus.style.color = '#64748b';
+      }
+      if (oidcCardDot) {
+        oidcCardDot.className = 'auth-status-dot';
+      }
+      if (drawerOidcLoginBtn) drawerOidcLoginBtn.innerText = 'Sign in with OIDC (PKCE)';
+    }
+  }
+
+  // Listen for OIDC auth state changes
+  window.addEventListener('oidc:change', (e) => {
+    updateOidcUI(e.detail.isAuthenticated, e.detail.user);
+  });
+
+  // Login buttons
+  if (topOidcLoginBtn) {
+    topOidcLoginBtn.addEventListener('click', () => window.OidcAuth && window.OidcAuth.login());
+  }
+  if (drawerOidcLoginBtn) {
+    drawerOidcLoginBtn.addEventListener('click', () => window.OidcAuth && window.OidcAuth.login());
+  }
+  if (topOidcLogoutBtn) {
+    topOidcLogoutBtn.addEventListener('click', () => {
+      if (window.OidcAuth) {
+        window.OidcAuth.logout();
+        authBanner.classList.add('hidden');
+        addSystemNotice('Logged out from OIDC session.');
+      }
+    });
+  }
+  if (drawerOidcMockBtn) {
+    drawerOidcMockBtn.addEventListener('click', () => {
+      if (window.OidcAuth) {
+        window.OidcAuth.simulateMockLogin();
+        addSystemNotice('Mock OIDC corporate identity session created.');
+      }
+    });
+  }
+
+  // Initialize OIDC Client and load server config from .env
+  if (window.OidcAuth) {
+    window.OidcAuth.init().then(() => {
+      // Update config labels from OidcAuth
+      if (displayOidcIssuer && window.OidcAuth.config.issuer) {
+        displayOidcIssuer.innerText = window.OidcAuth.config.issuer;
+      }
+      if (displayOidcClientId && window.OidcAuth.config.clientId) {
+        displayOidcClientId.innerText = window.OidcAuth.config.clientId;
+      }
+    });
+  }
+
   // Check if real Amazon Connect script was enabled in index.html
   if (typeof ENABLE_LIVE_CONNECT_WIDGET !== 'undefined' && ENABLE_LIVE_CONNECT_WIDGET) {
     const customWidget = document.getElementById('customChatWidget');

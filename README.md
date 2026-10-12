@@ -53,6 +53,30 @@ When you take this project into the client workspace to test with their real Ama
 
 ---
 
+## 🔐 Configuring OIDC Authentication via `.env`
+
+To bypass corporate SCPs and unauthenticated 403 errors, configure your Identity Provider in [`.env`](./.env):
+
+```env
+# --- 1. OIDC Identity Provider (Cognito / Okta / Azure AD) ---
+VITE_OIDC_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxxxxxx
+VITE_OIDC_CLIENT_ID=your_app_client_id
+VITE_OIDC_REDIRECT_URI=http://localhost:3000
+VITE_OIDC_SCOPES=openid email profile
+
+# --- 2. Amazon Connect Chat Widget ---
+CONNECT_SNIPPET_URL=https://xxxx.my.connect.aws/connectwidget/static/amazon-connect-chat-interface-client.js
+CONNECT_SNIPPET_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+### How OIDC Works in this Application:
+1. **Dynamic Config**: `server.py` reads `.env` on boot and exposes it via `GET /api/config`.
+2. **PKCE Flow ([oidc-auth.js](./oidc-auth.js))**: Clicking **"Sign in (OIDC)"** at the top right triggers standard Authorization Code flow with PKCE (`window.crypto.subtle`), redirecting to your OIDC provider.
+3. **Connect Authentication**: Upon login, `amazon_connect('authenticate', callback)` automatically hands your verified OIDC `id_token` to the Connect widget, bypassing anonymous SCP blocks.
+4. **Mock Mode**: If your OIDC provider is not yet set up, click **"Simulate Mock OIDC"** in the drawer to test authenticated state locally.
+
+---
+
 ## 🎨 Front-End Chat Widget Customization
 
 The Amazon Connect Hosted Communications Widget is customized on the front end through three core API parameters configured in [`amazon-connect-config.js`](./amazon-connect-config.js):
