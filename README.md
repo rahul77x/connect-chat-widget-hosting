@@ -53,27 +53,35 @@ When you take this project into the client workspace to test with their real Ama
 
 ---
 
-## 🔐 Configuring OIDC Authentication via `.env`
+## 🔐 IAM Identity Center (IDC) OIDC Authentication via `.env`
 
-To bypass corporate SCPs and unauthenticated 403 errors, configure your Identity Provider in [`.env`](./.env):
+Modeled directly after the official AWS reference implementation:
+👉 **[amazon-connect/ai-agents-lab-amazon-connect](https://github.com/amazon-connect/ai-agents-lab-amazon-connect)**
+
+Configure your IAM Identity Center settings in [`.env`](./.env):
 
 ```env
-# --- 1. OIDC Identity Provider (Cognito / Okta / Azure AD) ---
-VITE_OIDC_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxxxxxx
-VITE_OIDC_CLIENT_ID=your_app_client_id
+# --- 1. IAM Identity Center (IDC) OIDC Settings ---
+VITE_OIDC_ISSUER_URL=https://oidc.eu-west-1.amazonaws.com
+VITE_OIDC_CLIENT_ID=YOUR_OIDC_CLIENT_ID
+VITE_OIDC_CLIENT_SECRET=
 VITE_OIDC_REDIRECT_URI=http://localhost:3000
-VITE_OIDC_SCOPES=openid email profile
+VITE_AWS_REGION=eu-west-1
+VITE_OIDC_SCOPES=sso:account:access
+
+# Dev bypass mode (simulates authenticated session without calling IDC)
+VITE_AUTH_BYPASS=false
 
 # --- 2. Amazon Connect Chat Widget ---
 CONNECT_SNIPPET_URL=https://xxxx.my.connect.aws/connectwidget/static/amazon-connect-chat-interface-client.js
 CONNECT_SNIPPET_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
-### How OIDC Works in this Application:
-1. **Dynamic Config**: `server.py` reads `.env` on boot and exposes it via `GET /api/config`.
-2. **PKCE Flow ([oidc-auth.js](./oidc-auth.js))**: Clicking **"Sign in (OIDC)"** at the top right triggers standard Authorization Code flow with PKCE (`window.crypto.subtle`), redirecting to your OIDC provider.
-3. **Connect Authentication**: Upon login, `amazon_connect('authenticate', callback)` automatically hands your verified OIDC `id_token` to the Connect widget, bypassing anonymous SCP blocks.
-4. **Mock Mode**: If your OIDC provider is not yet set up, click **"Simulate Mock OIDC"** in the drawer to test authenticated state locally.
+### Why the previous `.well-known` call failed with 403:
+* **Root Cause**: AWS SSO-OIDC (`oidc.<region>.amazonaws.com`) **does not host** a public `/.well-known/openid-configuration` endpoint. Fetching it results in a `403 Forbidden` error.
+* **The Fix**: Following `ai-agents-lab-amazon-connect`, [oidc-auth.js](./oidc-auth.js) now generates the Authorization Code + PKCE challenge (`S256`) and redirects directly to `${VITE_OIDC_ISSUER_URL}/authorize?response_type=code&scope=sso:account:access&...` with **zero** discovery network calls.
+* **CORS Proxy**: When returning with `?code=...`, token exchange is proxied through the local server endpoint `/api/idc-token` to avoid browser CORS restrictions on `oidc.<region>.amazonaws.com`.
+* **Connect Integration**: Upon receiving the access token, `amazon_connect('authenticate', callback)` automatically supplies it to the Connect widget to authenticate the contact.
 
 ---
 

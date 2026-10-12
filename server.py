@@ -98,6 +98,58 @@ class ConnectAuthHandler(http.server.SimpleHTTPRequestHandler):
         except Exception:
             body = {}
 
+        if self.path == '/api/idc-token':
+            region = body.get("region") or os.environ.get("VITE_AWS_REGION", "eu-west-1")
+            client_id = body.get("clientId") or os.environ.get("VITE_OIDC_CLIENT_ID", "")
+            client_secret = body.get("clientSecret") or os.environ.get("VITE_OIDC_CLIENT_SECRET", "")
+            code = body.get("code", "")
+            redirect_uri = body.get("redirectUri") or os.environ.get("VITE_OIDC_REDIRECT_URI", f"http://localhost:{PORT}")
+            code_verifier = body.get("codeVerifier", "")
+
+            # AWS SSO OIDC Token Endpoint (matches CreateTokenCommand in ai-agents-lab)
+            token_url = f"https://oidc.{region}.amazonaws.com/token"
+            token_payload = {
+                "clientId": client_id,
+                "grantType": "authorization_code",
+                "code": code,
+                "redirectUri": redirect_uri,
+                "codeVerifier": code_verifier
+            }
+            if client_secret:
+                token_payload["clientSecret"] = client_secret
+
+            import urllib.request
+            import urllib.error
+
+            req_data = json.dumps(token_payload).encode('utf-8')
+            token_req = urllib.request.Request(
+                token_url,
+                data=req_data,
+                headers={"Content-Type": "application/json"}
+            )
+
+            try:
+                with urllib.request.urlopen(token_req) as resp:
+                    resp_body = resp.read()
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(resp_body)
+                    return
+            except urllib.error.HTTPError as e:
+                err_body = e.read()
+                self.send_response(e.code)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(err_body)
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+                return
+
         if self.path == '/api/chat-auth':
             result = create_connect_jwt(body)
             self.send_response(200)
@@ -139,15 +191,18 @@ class ConnectAuthHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == '/api/config':
             config_data = {
                 "oidc": {
-                    "issuer": os.environ.get("VITE_OIDC_ISSUER", ""),
+                    "issuerUrl": os.environ.get("VITE_OIDC_ISSUER_URL") or os.environ.get("VITE_OIDC_ISSUER", ""),
                     "clientId": os.environ.get("VITE_OIDC_CLIENT_ID", ""),
+                    "clientSecret": os.environ.get("VITE_OIDC_CLIENT_SECRET", ""),
                     "redirectUri": os.environ.get("VITE_OIDC_REDIRECT_URI", f"http://localhost:{PORT}"),
-                    "scopes": os.environ.get("VITE_OIDC_SCOPES", "openid email profile")
+                    "region": os.environ.get("VITE_AWS_REGION", "eu-west-1"),
+                    "scopes": os.environ.get("VITE_OIDC_SCOPES", "sso:account:access"),
+                    "authBypass": os.environ.get("VITE_AUTH_BYPASS", "").lower() == "true"
                 },
                 "connect": {
                     "snippetUrl": os.environ.get("CONNECT_SNIPPET_URL", ""),
                     "snippetId": os.environ.get("CONNECT_SNIPPET_ID", ""),
-                    "region": os.environ.get("AWS_REGION", "us-east-1")
+                    "region": os.environ.get("AWS_REGION", "eu-west-1")
                 }
             }
             self.send_response(200)

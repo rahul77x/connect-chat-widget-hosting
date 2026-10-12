@@ -1,54 +1,77 @@
 /**
- * OIDC (OpenID Connect) PKCE Client for Local Web Application & Amazon Connect
+ * AWS IAM Identity Center (IDC) OIDC Authentication Client
  * 
- * Features:
- * - Reads config dynamically from server (.env via /api/config)
- * - Standard Authorization Code Flow with PKCE (Proof Key for Code Exchange)
- * - Zero external dependencies - uses native browser crypto (SubtleCrypto)
- * - Exposes OidcAuth.getIdToken() and OidcAuth.getUser() for Amazon Connect authenticate callback
+ * Modeled directly after amazon-connect/ai-agents-lab-amazon-connect:
+ * - OIDC Authorization Code Flow with PKCE (Proof Key for Code Exchange)
+ * - Scope: 'sso:account:access'
+ * - Direct authorization URL redirection (no .well-known discovery calls that cause 403 on AWS SSO-OIDC)
+ * - Token exchange proxy via local /api/idc-token to handle AWS SSO-OIDC CORS restrictions
+ * - User display name resolution & token claims extraction
  */
 
-class OidcAuthClient {
+// Storage keys matching amazon-connect/ai-agents-lab-amazon-connect
+const STORAGE_KEY_VERIFIER = 'oidc_code_verifier';
+const STORAGE_KEY_STATE = 'oidc_state';
+const STORAGE_KEY_TOKEN = 'oidc_access_token';
+const STORAGE_KEY_USER = 'oidc_user_profile';
+
+class IdcOidcAuthClient {
   constructor() {
     this.config = {
-      issuer: '',
+      issuerUrl: '',
       clientId: '',
+      clientSecret: '',
       redirectUri: window.location.origin,
-      scopes: 'openid email profile'
+      region: 'eu-west-1',
+      scope: 'sso:account:access',
+      authBypass: false
     };
     this.user = null;
-    this.endpoints = null;
-    this.STORAGE_KEY = 'oidc_session';
-    this.PKCE_KEY = 'oidc_pkce_state';
+    this.accessToken = null;
   }
 
   /**
-   * Initializes OIDC by loading config from /api/config and checking for login redirect callback
+   * Initializes the OIDC client:
+   * 1. Loads configuration from server (/api/config)
+   * 2. Checks for dev bypass mode
+   * 3. Checks for redirect callback (?code=...&state=...)
+   * 4. Loads existing stored session
    */
   async init() {
     try {
       const res = await fetch('/api/config');
       const data = await res.json();
       if (data.oidc) {
-        this.config.issuer = data.oidc.issuer || '';
+        this.config.issuerUrl = data.oidc.issuerUrl || data.oidc.issuer || '';
         this.config.clientId = data.oidc.clientId || '';
+        this.config.clientSecret = data.oidc.clientSecret || '';
         this.config.redirectUri = data.oidc.redirectUri || window.location.origin;
-        this.config.scopes = data.oidc.scopes || 'openid email profile';
+        this.config.region = data.oidc.region || 'eu-west-1';
+        this.config.scope = data.oidc.scopes || 'sso:account:access';
+        this.config.authBypass = data.oidc.authBypass || false;
       }
     } catch (e) {
-      console.warn('[OIDC] Could not fetch /api/config, using defaults', e);
+      console.warn('[IDC OIDC] Could not fetch /api/config:', e);
     }
 
-    // Check if user is already logged in from previous session
-    this.loadStoredSession();
+    // Dev bypass mode from .env (VITE_AUTH_BYPASS=true)
+    if (this.config.authBypass) {
+      console.log('[IDC OIDC] Dev bypass mode active (VITE_AUTH_BYPASS=true)');
+      this.simulateMockLogin('dev-bypass-user@company.com');
+      return true;
+    }
 
-    // Check if browser URL has authorization code callback (?code=...&state=...)
+    // Check if returning from redirect with auth code (?code=...&state=...)
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const state = urlParams.get('state');
 
     if (code && state) {
+      console.log('[IDC OIDC] Detected authorization code callback, exchanging token...');
       await this.handleCallback(code, state);
+    } else {
+      // Load previous session
+      this.loadStoredSession();
     }
 
     this.dispatchStateChange();
@@ -56,9 +79,9 @@ class OidcAuthClient {
   }
 
   /**
-   * Generates a cryptographically random string
+   * Generates a cryptographically random code verifier for PKCE (RFC 7636)
    */
-  generateRandomString(length = 64) {
+  generateCodeVerifier(length = 64) {
     const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
     const randomValues = new Uint8Array(length);
     window.crypto.getRandomValues(randomValues);
@@ -70,9 +93,9 @@ class OidcAuthClient {
   }
 
   /**
-   * Computes SHA-256 hash and encodes in Base64URL for PKCE code_challenge
+   * Derives S256 code challenge from verifier using Web Crypto API
    */
-  async generateCodeChallenge(verifier) {
+  async deriveCodeChallenge(verifier) {
     const encoder = new TextEncoder();
     const data = encoder.encode(verifier);
     const digest = await window.crypto.subtle.digest('SHA-256', data);
@@ -83,216 +106,254 @@ class OidcAuthClient {
   }
 
   /**
-   * Discovers OIDC endpoints via /.well-known/openid-configuration
+   * Generates random state parameter
    */
-  async getEndpoints() {
-    if (this.endpoints) return this.endpoints;
-    
-    const issuer = this.config.issuer.replace(/\/+$/, '');
-    if (!issuer || issuer.includes('YOUR_USER_POOL_ID')) {
-      // Fallback dummy endpoints
-      return {
-        authorization_endpoint: `${issuer}/oauth2/authorize`,
-        token_endpoint: `${issuer}/oauth2/token`,
-        userinfo_endpoint: `${issuer}/oauth2/userInfo`
-      };
-    }
-
-    try {
-      const res = await fetch(`${issuer}/.well-known/openid-configuration`);
-      if (res.ok) {
-        this.endpoints = await res.json();
-        return this.endpoints;
-      }
-    } catch (e) {
-      console.warn('[OIDC] Discovery failed, falling back to standard paths:', e);
-    }
-
-    // Fallback standard Cognito / OIDC endpoints
-    return {
-      authorization_endpoint: `${issuer}/oauth2/authorize`,
-      token_endpoint: `${issuer}/oauth2/token`,
-      userinfo_endpoint: `${issuer}/oauth2/userInfo`
-    };
+  generateState() {
+    return this.generateCodeVerifier(32);
   }
 
   /**
-   * Starts the OIDC Login flow (redirects browser to IdP)
+   * Builds the authorization URL matching ai-agents-lab-amazon-connect
+   */
+  buildAuthorizeUrl(challenge, state) {
+    let baseUrl = this.config.issuerUrl.trim().replace(/\/+$/, '');
+    
+    // Auto-prepend https:// if missing
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+      baseUrl = `https://${baseUrl}`;
+    }
+
+    // Format endpoint: IAM Identity Center authorize endpoint
+    const authorizeEndpoint = baseUrl.endsWith('/authorize') ? baseUrl : `${baseUrl}/authorize`;
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: this.config.clientId,
+      redirect_uri: this.config.redirectUri,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      state: state,
+      scope: this.config.scope || 'sso:account:access'
+    });
+
+    return `${authorizeEndpoint}?${params.toString()}`;
+  }
+
+  /**
+   * Initiates OIDC Authorization Code Flow with PKCE
+   * Directly redirects to IDC authorization endpoint (NO .well-known call!)
    */
   async login() {
-    if (!this.config.issuer || this.config.issuer.includes('YOUR_USER_POOL_ID')) {
-      // Prompt user or simulate mock login if .env is not yet updated
-      const useMock = confirm('Your VITE_OIDC_ISSUER is currently set to the default placeholder in .env.\n\nWould you like to simulate a successful OIDC login locally for testing?');
-      if (useMock) {
+    if (!this.config.issuerUrl || !this.config.clientId || this.config.clientId.includes('YOUR_')) {
+      const proceedMock = confirm(
+        'VITE_OIDC_ISSUER_URL or VITE_OIDC_CLIENT_ID is not configured in .env yet.\n\n' +
+        'Would you like to simulate a successful IDC login locally for testing?'
+      );
+      if (proceedMock) {
         this.simulateMockLogin();
-        return;
       }
-      alert('Please update VITE_OIDC_ISSUER and VITE_OIDC_CLIENT_ID in your .env file with your actual provider details.');
       return;
     }
 
-    const codeVerifier = this.generateRandomString(64);
-    const codeChallenge = await this.generateCodeChallenge(codeVerifier);
-    const state = this.generateRandomString(32);
+    try {
+      const verifier = this.generateCodeVerifier();
+      const challenge = await this.deriveCodeChallenge(verifier);
+      const state = this.generateState();
 
-    // Save PKCE verifier and state in session storage
-    sessionStorage.setItem(this.PKCE_KEY, JSON.stringify({
-      codeVerifier,
-      state,
-      returnUrl: window.location.pathname
-    }));
+      // Store in sessionStorage to survive redirect
+      sessionStorage.setItem(STORAGE_KEY_VERIFIER, verifier);
+      sessionStorage.setItem(STORAGE_KEY_STATE, state);
 
-    const endpoints = await this.getEndpoints();
-    const authUrl = new URL(endpoints.authorization_endpoint);
-    authUrl.searchParams.set('client_id', this.config.clientId);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', this.config.scopes);
-    authUrl.searchParams.set('redirect_uri', this.config.redirectUri);
-    authUrl.searchParams.set('code_challenge', codeChallenge);
-    authUrl.searchParams.set('code_challenge_method', 'S256');
-    authUrl.searchParams.set('state', state);
+      const authorizeUrl = this.buildAuthorizeUrl(challenge, state);
+      console.log('[IDC OIDC] Redirecting to IDC authorization endpoint:', authorizeUrl);
 
-    console.log('[OIDC] Redirecting to login:', authUrl.toString());
-    window.location.href = authUrl.toString();
+      // Redirect browser directly to IAM Identity Center
+      window.location.href = authorizeUrl;
+    } catch (err) {
+      console.error('[IDC OIDC] Login initiation error:', err);
+      alert(`Could not initiate OIDC login: ${err.message}`);
+    }
   }
 
   /**
-   * Handles redirect callback with authorization code
+   * Handles callback after IAM Identity Center redirects back with ?code=...&state=...
    */
   async handleCallback(code, state) {
-    const pkceRaw = sessionStorage.getItem(this.PKCE_KEY);
-    if (!pkceRaw) {
-      console.error('[OIDC] No PKCE state found in sessionStorage');
+    const storedState = sessionStorage.getItem(STORAGE_KEY_STATE);
+
+    if (state !== storedState) {
+      console.error('[IDC OIDC] Security error: state mismatch');
+      alert('Security error: state mismatch during OIDC callback');
       return;
     }
 
-    const pkce = JSON.parse(pkceRaw);
-    sessionStorage.removeItem(this.PKCE_KEY);
-
-    if (pkce.state !== state) {
-      console.error('[OIDC] State mismatch error! CSRF attack possible.');
+    const verifier = sessionStorage.getItem(STORAGE_KEY_VERIFIER);
+    if (!verifier) {
+      console.error('[IDC OIDC] Missing code verifier in session storage');
       return;
     }
 
     try {
-      const endpoints = await this.getEndpoints();
-      const body = new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: this.config.clientId,
-        redirect_uri: this.config.redirectUri,
+      // Exchange code for token via local proxy /api/idc-token to handle CORS
+      const tokenPayload = {
+        clientId: this.config.clientId,
+        clientSecret: this.config.clientSecret,
         code: code,
-        code_verifier: pkce.codeVerifier
-      });
+        redirectUri: this.config.redirectUri,
+        codeVerifier: verifier,
+        region: this.config.region,
+        issuerUrl: this.config.issuerUrl
+      };
 
-      const res = await fetch(endpoints.token_endpoint, {
+      console.log('[IDC OIDC] Exchanging code for token via /api/idc-token...');
+      const response = await fetch('/api/idc-token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString()
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tokenPayload)
       });
 
-      if (!res.ok) {
-        throw new Error(`Token exchange failed: ${res.statusText}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error_description || errorData.error || response.statusText);
       }
 
-      const tokenData = await res.json();
-      this.processTokenResponse(tokenData);
+      const tokenData = await response.json();
+      const accessToken = tokenData.accessToken || tokenData.access_token || tokenData.idToken || tokenData.id_token;
 
-      // Clean URL parameters
-      window.history.replaceState({}, document.title, pkce.returnUrl || window.location.pathname);
+      if (!accessToken) {
+        throw new Error('No access token received from token exchange');
+      }
+
+      this.accessToken = accessToken;
+      sessionStorage.setItem(STORAGE_KEY_TOKEN, accessToken);
+
+      // Clean session storage
+      sessionStorage.removeItem(STORAGE_KEY_VERIFIER);
+      sessionStorage.removeItem(STORAGE_KEY_STATE);
+
+      // Decode claims and resolve display name
+      const claims = this.decodeTokenClaims(accessToken);
+      const displayName = this.resolveDisplayName(claims);
+
+      this.user = {
+        accessToken: accessToken,
+        idToken: tokenData.idToken || tokenData.id_token || accessToken,
+        expiresIn: tokenData.expiresIn || 3600,
+        expiresAt: Date.now() + (tokenData.expiresIn || 3600) * 1000,
+        profile: {
+          name: displayName,
+          email: claims.email || (displayName.includes('@') ? displayName : 'authenticated-user@company.com'),
+          claims: claims
+        }
+      };
+
+      sessionStorage.setItem(STORAGE_KEY_USER, JSON.stringify(this.user));
+
+      // Clean query params from URL (remove ?code=...&state=...)
+      window.history.replaceState({}, document.title, window.location.pathname);
+      console.log('[IDC OIDC] Successfully authenticated as:', displayName);
     } catch (err) {
-      console.error('[OIDC] Error during token exchange:', err);
-      alert(`OIDC login error: ${err.message}`);
+      console.error('[IDC OIDC] Token exchange failed:', err);
+      alert(`OIDC Token exchange error: ${err.message}`);
     }
   }
 
   /**
-   * Decodes JWT without external library
+   * Decodes JWT without signature verification (matches ai-agents-lab-amazon-connect)
    */
-  parseJwt(token) {
+  decodeTokenClaims(token) {
     try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
+      const parts = token.split('.');
+      if (parts.length !== 3) return {};
+      const payload = parts[1];
+      const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+      return JSON.parse(decoded);
     } catch (e) {
+      console.warn('[IDC OIDC] Failed to decode JWT claims, using fallback');
       return {};
     }
   }
 
-  processTokenResponse(tokenData) {
-    const claims = tokenData.id_token ? this.parseJwt(tokenData.id_token) : {};
-    
-    this.user = {
-      idToken: tokenData.id_token,
-      accessToken: tokenData.access_token,
-      expiresAt: Date.now() + (tokenData.expires_in || 3600) * 1000,
-      profile: {
-        email: claims.email || claims['cognito:username'] || claims.sub || 'authenticated-user@company.com',
-        name: claims.name || claims.preferred_username || claims.email || 'Corporate User',
-        sub: claims.sub || 'usr-123456',
-        claims
-      }
-    };
-
-    sessionStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.user));
-    this.dispatchStateChange();
+  /**
+   * Resolves display name using fallback chain (matches ai-agents-lab-amazon-connect):
+   * name -> email -> preferred_username -> sub -> "User"
+   */
+  resolveDisplayName(claims) {
+    if (typeof claims.name === 'string' && claims.name.length > 0) {
+      return claims.name;
+    }
+    if (typeof claims.email === 'string' && claims.email.length > 0) {
+      return claims.email;
+    }
+    if (typeof claims.preferred_username === 'string' && claims.preferred_username.length > 0) {
+      return claims.preferred_username;
+    }
+    if (typeof claims.sub === 'string' && claims.sub.length > 0 && claims.sub.includes('@')) {
+      return claims.sub;
+    }
+    return 'IAM Identity Center User';
   }
 
-  /**
-   * Simulates a local mock login with a valid JWT structure for offline prototype testing
-   */
-  simulateMockLogin() {
+  simulateMockLogin(customEmail = 'rahul.idc@clientcompany.com') {
     const mockClaims = {
-      sub: 'usr-corp-984210',
-      email: 'rahul.corp@clientcompany.com',
-      name: 'Rahul Sharma (Corporate OIDC)',
-      iss: this.config.issuer || 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_mock',
-      aud: this.config.clientId || 'client-app-123',
-      iat: Math.floor(Date.now() / 1000),
+      sub: 'usr-idc-89214',
+      email: customEmail,
+      name: 'Rahul Sharma (IDC Verified)',
+      iss: this.config.issuerUrl || 'https://oidc.eu-west-1.amazonaws.com',
+      client_id: this.config.clientId || 'client-idc-app',
       exp: Math.floor(Date.now() / 1000) + 3600
     };
 
     const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=/g, '');
     const payload = btoa(JSON.stringify(mockClaims)).replace(/=/g, '');
-    const dummySignature = 'mock-signature-oidc-verified-token-preview';
-    const mockJwt = `${header}.${payload}.${dummySignature}`;
+    const mockToken = `${header}.${payload}.mock-signature-idc-authenticated-token`;
 
-    this.processTokenResponse({
-      id_token: mockJwt,
-      access_token: 'mock-access-token-bearer-123',
-      expires_in: 3600
-    });
+    this.accessToken = mockToken;
+    this.user = {
+      accessToken: mockToken,
+      idToken: mockToken,
+      expiresAt: Date.now() + 3600 * 1000,
+      profile: {
+        name: mockClaims.name,
+        email: mockClaims.email,
+        claims: mockClaims
+      }
+    };
+
+    sessionStorage.setItem(STORAGE_KEY_TOKEN, mockToken);
+    sessionStorage.setItem(STORAGE_KEY_USER, JSON.stringify(this.user));
+    this.dispatchStateChange();
   }
 
   logout() {
     this.user = null;
-    sessionStorage.removeItem(this.STORAGE_KEY);
+    this.accessToken = null;
+    sessionStorage.removeItem(STORAGE_KEY_TOKEN);
+    sessionStorage.removeItem(STORAGE_KEY_USER);
+    sessionStorage.removeItem(STORAGE_KEY_VERIFIER);
+    sessionStorage.removeItem(STORAGE_KEY_STATE);
     this.dispatchStateChange();
   }
 
   loadStoredSession() {
-    const raw = sessionStorage.getItem(this.STORAGE_KEY);
+    const raw = sessionStorage.getItem(STORAGE_KEY_USER);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
         if (parsed.expiresAt && parsed.expiresAt > Date.now()) {
           this.user = parsed;
+          this.accessToken = parsed.accessToken;
         } else {
-          sessionStorage.removeItem(this.STORAGE_KEY);
+          this.logout();
         }
       } catch (e) {
-        sessionStorage.removeItem(this.STORAGE_KEY);
+        this.logout();
       }
     }
   }
 
   isAuthenticated() {
-    return !!(this.user && this.user.idToken && this.user.expiresAt > Date.now());
+    return !!(this.user && this.accessToken && this.user.expiresAt > Date.now());
   }
 
   getUser() {
@@ -300,11 +361,11 @@ class OidcAuthClient {
   }
 
   getIdToken() {
-    return this.user ? this.user.idToken : null;
+    return this.user ? (this.user.idToken || this.user.accessToken) : null;
   }
 
   getAccessToken() {
-    return this.user ? this.user.accessToken : null;
+    return this.accessToken;
   }
 
   dispatchStateChange() {
@@ -317,6 +378,5 @@ class OidcAuthClient {
   }
 }
 
-// Global Singleton Instance
-window.OidcAuth = new OidcAuthClient();
-
+// Global Singleton
+window.OidcAuth = new IdcOidcAuthClient();

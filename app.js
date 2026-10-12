@@ -528,8 +528,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.OidcAuth) {
     window.OidcAuth.init().then(() => {
       // Update config labels from OidcAuth
-      if (displayOidcIssuer && window.OidcAuth.config.issuer) {
-        displayOidcIssuer.innerText = window.OidcAuth.config.issuer;
+      const issuer = window.OidcAuth.config.issuerUrl || window.OidcAuth.config.issuer;
+      if (displayOidcIssuer && issuer) {
+        displayOidcIssuer.innerText = issuer;
       }
       if (displayOidcClientId && window.OidcAuth.config.clientId) {
         displayOidcClientId.innerText = window.OidcAuth.config.clientId;
