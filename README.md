@@ -14,7 +14,7 @@ This project is a static website and local authentication setup built to prototy
    - Configurable widget dimensions (`frameWidth`, `frameHeight`).
    - 1-click **"Copy Connect Config"** button to generate production-ready Amazon Connect snippet code.
 4. **Local Workspace Authentication Server**:
-   - Zero-dependency local server (`node server.js` or `python server.py`).
+   - Zero-dependency local Python server (`python server.py`).
    - Implements `/api/chat-auth` to issue signed JWT tokens for Amazon Connect Authenticated Chat.
    - Implements `/api/start-chat` proxy for AWS SDK `StartChatContactCommand`.
 5. **Dual Modes**:
@@ -25,18 +25,8 @@ This project is a static website and local authentication setup built to prototy
 
 ## 🚀 How to Run Locally
 
-You can run the project using either **Node.js** or **Python 3** (no external package installations required):
+Run the zero-dependency Python server (standard library only, no `pip install` needed):
 
-### Option A: Using Node.js (Recommended)
-```bash
-# Start the server (uses port 3000 by default)
-node server.js
-
-# Or using npm
-npm start
-```
-
-### Option B: Using Python 3
 ```bash
 python server.py
 ```
@@ -191,7 +181,7 @@ amazon_connect('authenticate', function(callback) {
 ```
 
 #### 2. What the Local Server Generates:
-The local server (`server.js` / `server.py`) generates a signed JWT payload:
+The local server (`server.py`) generates a signed JWT payload:
 ```json
 {
   "sub": "BOI-CUST-984210",
@@ -215,25 +205,22 @@ When this JWT is passed to Amazon Connect:
 
 If building a custom chat client using **`amazon-connect-chatjs`** instead of the pre-built widget iframe:
 - The browser should never store AWS IAM Access Keys.
-- Your local server invokes `StartChatContactCommand` from `@aws-sdk/client-connect`:
-```javascript
-const { ConnectClient, StartChatContactCommand } = require("@aws-sdk/client-connect");
-const client = new ConnectClient({ region: "us-east-1" });
+- Your local Python server invokes `start_chat_contact` from AWS SDK (`boto3`):
+```python
+import boto3
 
-const command = new StartChatContactCommand({
-  InstanceId: "YOUR-CONNECT-INSTANCE-ID",
-  ContactFlowId: "YOUR-CONTACT-FLOW-ID",
-  ParticipantDetails: {
-    DisplayName: "Rahul Sharma"
-  },
-  Attributes: {
-    "customerId": "BOI-CUST-984210",
-    "authenticated": "true"
-  }
-});
+client = boto3.client('connect', region_name='us-east-1')
 
-const response = await client.send(command);
-// Returns ContactId, ParticipantId, ParticipantToken to the frontend
+response = client.start_chat_contact(
+    InstanceId='YOUR-CONNECT-INSTANCE-ID',
+    ContactFlowId='YOUR-CONTACT-FLOW-ID',
+    ParticipantDetails={'DisplayName': 'Rahul Sharma'},
+    Attributes={
+        'customerId': 'BOI-CUST-984210',
+        'authenticated': 'true'
+    }
+)
+# Returns ContactId, ParticipantId, ParticipantToken to the frontend
 ```
 - The local server returns `ParticipantToken` to the browser, which initializes `connect.ChatSession.create(...)`.
 
@@ -246,9 +233,7 @@ const response = await client.send(command);
 ├── styles.css                  # Custom styling: background, blue badge, chat widget overrides
 ├── app.js                      # Application logic, widget controller, prototype AI responses
 ├── amazon-connect-config.js    # Dedicated configuration for Amazon Connect (styles, customStyles)
-├── server.js                   # Local development server with auth endpoints (Node.js)
 ├── server.py                   # Local development server with auth endpoints (Python)
-├── package.json                # npm scripts for running local server
 ├── README.md                   # Detailed setup, styling, and authentication guide
 └── website-screenshot.png      # Bank website background mockup
 ```

@@ -376,7 +376,7 @@ document.addEventListener('DOMContentLoaded', () => {
         addSystemNotice(`Authentication verified for ${payload.customerName}. Session JWT Token generated.`);
       }
     } catch (err) {
-      authResultOutput.innerText = `Error contacting local auth server:\n${err.message}\n\nMake sure your local server is running (node server.js or python server.py)!`;
+      authResultOutput.innerText = `Error contacting local auth server:\n${err.message}\n\nMake sure your local server is running (python server.py)!`;
     }
   });
 
@@ -398,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       authResultOutput.innerText = JSON.stringify(data, null, 2);
     } catch (err) {
-      authResultOutput.innerText = `Error calling /api/start-chat:\n${err.message}\n\nMake sure your local server is running (node server.js or python server.py)!`;
+      authResultOutput.innerText = `Error calling /api/start-chat:\n${err.message}\n\nMake sure your local server is running (python server.py)!`;
     }
   });
 
