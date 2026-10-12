@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon Connect Chat Widget - Prototype</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Background Website Mockup Container -->
+  <main class="website-viewport">
+    <img 
+      src="website-screenshot.png" 
+      alt="Host Website Background" 
+      class="background-screenshot" 
+      id="bgScreenshot"
+      draggable="false"
+    />
+  </main>
+
+  <!-- Top-Right Required Badge -->
+  <div class="prototype-dev-badge" id="prototypeDevBadge" title="AI Chatbot Prototype Environment">
+    <span class="badge-pulse"></span>
+    <span class="badge-text">AI-Chatbot-Prototype-dev</span>
+  </div>
+
+  <!-- Top-Left Floating Dev & Customizer Controls -->
+  <aside class="dev-toolbar" id="devToolbar">
+    <button class="dev-toolbar-toggle" id="devToolbarToggle" title="Toggle Customizer & Auth Panel">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+      </svg>
+      <span>Widget Customizer & Auth</span>
+    </button>
+
+    <!-- Slide-out Customizer Drawer -->
+    <div class="customizer-panel hidden" id="customizerPanel">
+      <div class="customizer-header">
+        <h3>Connect Widget Customizer</h3>
+        <button class="close-panel-btn" id="closePanelBtn" title="Close Panel">&times;</button>
+      </div>
+
+      <div class="customizer-tabs">
+        <button class="tab-btn active" data-tab="tab-styling">Front-End Styling</button>
+        <button class="tab-btn" data-tab="tab-auth">Local Authentication</button>
+        <button class="tab-btn" data-tab="tab-connect">Live AWS Connect</button>
+      </div>
+
+      <!-- Tab 1: Front-End Styling -->
+      <div class="tab-content active" id="tab-styling">
+        <p class="tab-desc">Fine-tune your chat widget's visual identity to match the website branding.</p>
+        
+        <div class="control-group">
+          <label for="brandPreset">Quick Brand Presets:</label>
+          <select id="brandPreset" class="form-select">
+            <option value="boi-blue" selected>Bank Blue (#004085 / #ED6C00)</option>
+            <option value="aws-squid">AWS Connect Classic (#0073BB / #07B62A)</option>
+            <option value="emerald">Modern Emerald (#0F766E)</option>
+            <option value="indigo">Tech Indigo (#4F46E5)</option>
+            <option value="dark-slate">Dark Slate (#1E293B)</option>
+          </select>
+        </div>
+
+        <div class="control-row">
+          <div class="control-group half">
+            <label for="primaryColor">Primary / Header Color:</label>
+            <div class="color-picker-wrap">
+              <input type="color" id="primaryColor" value="#004085">
+              <span class="color-hex" id="primaryColorHex">#004085</span>
+            </div>
+          </div>
+          <div class="control-group half">
+            <label for="launcherBgColor">Launcher Button:</label>
+            <div class="color-picker-wrap">
+              <input type="color" id="launcherBgColor" value="#004085">
+              <span class="color-hex" id="launcherBgColorHex">#004085</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-row">
+          <div class="control-group half">
+            <label for="customerBubbleColor">Customer Bubble:</label>
+            <div class="color-picker-wrap">
+              <input type="color" id="customerBubbleColor" value="#0056b3">
+              <span class="color-hex" id="customerBubbleColorHex">#0056b3</span>
+            </div>
+          </div>
+          <div class="control-group half">
+            <label for="agentBubbleColor">Agent Bubble:</label>
+            <div class="color-picker-wrap">
+              <input type="color" id="agentBubbleColor" value="#f0f4f8">
+              <span class="color-hex" id="agentBubbleColorHex">#f0f4f8</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label for="botDisplayName">Bot Display Name:</label>
+          <input type="text" id="botDisplayName" class="form-input" value="Bank AI Virtual Assistant">
+        </div>
+
+        <div class="control-group">
+          <label for="headerSubtitle">Header Subtitle / Status:</label>
+          <input type="text" id="headerSubtitle" class="form-input" value="Always available 24/7">
+        </div>
+
+        <div class="control-row">
+          <div class="control-group half">
+            <label for="frameWidth">Widget Width (px):</label>
+            <input type="number" id="frameWidth" class="form-input" value="380" min="320" max="520" step="10">
+          </div>
+          <div class="control-group half">
+            <label for="frameHeight">Widget Height (px):</label>
+            <input type="number" id="frameHeight" class="form-input" value="620" min="450" max="800" step="10">
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary" id="applyStylesBtn">Apply to Widget</button>
+          <button class="btn btn-secondary" id="copySnippetConfigBtn">Copy Connect Config</button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Local Authentication -->
+      <div class="tab-content" id="tab-auth">
+        <p class="tab-desc">Test how authentication & session tokens are initiated from your local workspace.</p>
+
+        <div class="auth-card">
+          <div class="auth-card-header">
+            <span class="auth-status-dot connected"></span>
+            <strong>Local Server Auth Endpoints</strong>
+          </div>
+          <div class="auth-card-body">
+            <div class="auth-item">
+              <span class="auth-method">GET / POST</span>
+              <code>/api/chat-auth</code>
+              <p>Generates an authenticated JWT signed for Amazon Connect.</p>
+            </div>
+            <div class="auth-item">
+              <span class="auth-method">POST</span>
+              <code>/api/start-chat</code>
+              <p>Calls AWS SDK <code>StartChatContact</code> with IAM credentials.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label for="authCustomerName">Simulated Customer Name:</label>
+          <input type="text" id="authCustomerName" class="form-input" value="Rahul Sharma">
+        </div>
+
+        <div class="control-group">
+          <label for="authCustomerId">Customer ID / Account No:</label>
+          <input type="text" id="authCustomerId" class="form-input" value="BOI-CUST-984210">
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary" id="testAuthTokenBtn">Test Generate Auth JWT</button>
+          <button class="btn btn-secondary" id="testStartChatBtn">Test StartChatContact</button>
+        </div>
+
+        <div class="auth-result-box" id="authResultBox">
+          <div class="result-title">Response Output:</div>
+          <pre id="authResultOutput">// Click "Test Generate Auth JWT" above to test...</pre>
+        </div>
+      </div>
+
+      <!-- Tab 3: Live AWS Connect Widget -->
+      <div class="tab-content" id="tab-connect">
+        <p class="tab-desc">Switch from local visual prototype to the official Amazon Connect hosted script.</p>
+
+        <div class="control-group toggle-row">
+          <label for="useLiveConnectToggle"><strong>Enable Real Amazon Connect Script:</strong></label>
+          <input type="checkbox" id="useLiveConnectToggle" class="form-toggle">
+        </div>
+
+        <div class="info-alert">
+          <strong>Prerequisite for Localhost:</strong> You must add <code>http://localhost:3000</code> to your Amazon Connect <em>Approved Origins</em> list in AWS Console under <em>Amazon Connect &gt; Approved origins</em>.
+        </div>
+
+        <div class="control-group">
+          <label for="connectSnippetUrl">Amazon Connect Script CDN URL:</label>
+          <input type="text" id="connectSnippetUrl" class="form-input" placeholder="https://xxxx.my.connect.aws/connectwidget/static/amazon-connect-chat-interface-client.js">
+        </div>
+
+        <div class="control-group">
+          <label for="connectSnippetId">Amazon Connect Snippet ID:</label>
+          <input type="text" id="connectSnippetId" class="form-input" placeholder="e.g. 1a2b3c4d-5678-90ab-cdef-1234567890ab">
+        </div>
+
+        <div class="control-group">
+          <label for="connectInstanceId">Amazon Connect Instance ID / Region:</label>
+          <input type="text" id="connectInstanceId" class="form-input" placeholder="e.g. us-east-1 / instance-id">
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary" id="saveConnectConfigBtn">Save & Mount Widget</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Prototype Interactive Front-End Chat Widget -->
+  <div class="custom-chat-widget" id="customChatWidget">
+    
+    <!-- Floating Launcher Button -->
+    <button class="chat-launcher" id="chatLauncher" aria-label="Open Chat Assistant" title="Chat with AI Assistant">
+      <div class="launcher-icon-wrapper">
+        <!-- Chat Icon -->
+        <svg class="icon-chat" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <!-- Close Icon -->
+        <svg class="icon-close hidden" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </div>
+      <!-- Unread Notification Pill -->
+      <span class="unread-badge" id="unreadBadge">1</span>
+    </button>
+
+    <!-- Chat Window Container -->
+    <section class="chat-window hidden" id="chatWindow" role="dialog" aria-modal="true" aria-label="Chat Window">
+      
+      <!-- Widget Header -->
+      <header class="chat-header" id="chatHeader">
+        <div class="header-left">
+          <div class="bot-avatar">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+              <circle cx="12" cy="5" r="2"></circle>
+              <path d="M12 7v4"></path>
+              <line x1="8" y1="16" x2="8" y2="16"></line>
+              <line x1="16" y1="16" x2="16" y2="16"></line>
+            </svg>
+          </div>
+          <div class="header-details">
+            <h4 class="bot-title" id="displayBotTitle">Bank AI Virtual Assistant</h4>
+            <span class="bot-subtitle" id="displayBotSubtitle">
+              <span class="status-indicator"></span> Always available 24/7
+            </span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <!-- Dropdown Options Menu -->
+          <div class="dropdown-wrap">
+            <button class="header-action-btn" id="headerMenuBtn" title="More Options">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5" r="2"></circle>
+                <circle cx="12" cy="12" r="2"></circle>
+                <circle cx="12" cy="19" r="2"></circle>
+              </svg>
+            </button>
+            <div class="dropdown-menu hidden" id="headerDropdownMenu">
+              <button class="dropdown-item" id="menuClearChat">Clear Conversation</button>
+              <button class="dropdown-item" id="menuEndChat">End Chat Session</button>
+              <button class="dropdown-item" id="menuCopyTranscript">Download Transcript</button>
+            </div>
+          </div>
+
+          <!-- Minimize Button -->
+          <button class="header-action-btn" id="minimizeChatBtn" title="Minimize Chat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Customer Auth Status Banner -->
+      <div class="auth-banner" id="authBanner">
+        <span class="auth-icon">🛡️</span>
+        <span class="auth-text" id="authBannerText">Authenticated: <strong>Rahul Sharma</strong> (BOI-CUST-984210)</span>
+      </div>
+
+      <!-- Chat Transcript Area -->
+      <div class="chat-transcript" id="chatTranscript">
+        <div class="transcript-date-divider">
+          <span>Today</span>
+        </div>
+
+        <!-- Initial Welcome Message -->
+        <div class="message-row agent-message">
+          <div class="message-avatar">
+            <span>AI</span>
+          </div>
+          <div class="message-content-wrapper">
+            <div class="message-bubble agent-bubble">
+              <p>Hello! Welcome to Bank Customer Support. How can I assist you with your banking services today?</p>
+            </div>
+            <span class="message-timestamp">Just now</span>
+          </div>
+        </div>
+
+        <!-- Quick Action / Interactive Chips -->
+        <div class="quick-chips-wrapper" id="quickChipsWrapper">
+          <button class="chip-btn" data-query="Check my account balance">Check Balance</button>
+          <button class="chip-btn" data-query="Show current FD interest rates">FD Interest Rates</button>
+          <button class="chip-btn" data-query="How to apply for a personal loan?">Loan Information</button>
+          <button class="chip-btn" data-query="Connect me to a live human agent">Talk to Human Agent</button>
+        </div>
+
+        <!-- Typing Indicator (Hidden by default) -->
+        <div class="typing-indicator hidden" id="typingIndicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>
+
+      <!-- Chat Input Footer -->
+      <footer class="chat-footer">
+        <form class="chat-composer" id="chatComposer">
+          <button type="button" class="composer-icon-btn" id="attachBtn" title="Attach Document / Screenshot">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
+          
+          <input 
+            type="text" 
+            id="messageInput" 
+            class="composer-input" 
+            placeholder="Type your message here..." 
+            autocomplete="off"
+            maxlength="1000"
+          />
+
+          <button type="submit" class="composer-send-btn" id="sendBtn" title="Send Message">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </form>
+
+        <div class="powered-by-footer">
+          <span>Amazon Connect Communications Interface</span>
+        </div>
+      </footer>
+
+    </section>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 🔹 CLIENT AMAZON CONNECT WIDGET REPLACEMENT SECTION                     -->
+  <!-- ========================================================================= -->
+  <!-- 
+    WHEN TESTING IN YOUR CLIENT WORKSPACE:
+    1. Set ENABLE_LIVE_CONNECT_WIDGET = true below (or use the web UI toggle).
+    2. Replace the dummy CDN URL and Snippet ID below with your client's script.
+    3. Ensure http://localhost:3000 is whitelisted under AWS Connect "Approved origins".
+  -->
+  <div id="amazon-connect-container"></div>
+
+  <script type="text/javascript" id="client-amazon-connect-snippet">
+    // 🚩 Change this flag to true once you are in the client workspace:
+    const ENABLE_LIVE_CONNECT_WIDGET = false;
+
+    // 👇 [REPLACE THESE WITH CLIENT AWS VALUES] 👇
+    const DUMMY_CONNECT_CDN_URL = 'https://YOUR_CONNECT_INSTANCE.my.connect.aws/connectwidget/static/amazon-connect-chat-interface-client.js';
+    const DUMMY_CONNECT_SNIPPET_ID = '12345678-1234-1234-1234-1234567890ab';
+
+    if (ENABLE_LIVE_CONNECT_WIDGET) {
+      (function(w, d, x, id){
+        var s = d.createElement('script');
+        s.src = DUMMY_CONNECT_CDN_URL; // <-- Paste client CDN URL here
+        s.async = 1;
+        s.id = id;
+        d.getElementsByTagName('head')[0].appendChild(s);
+        w[x] = w[x] || function() { (w[x].ac = w[x].ac || []).push(arguments); };
+      })(window, document, 'amazon_connect', DUMMY_CONNECT_SNIPPET_ID);
+
+      // Core Config
+      amazon_connect('snippetId', DUMMY_CONNECT_SNIPPET_ID); // <-- Paste client Snippet ID here
+      amazon_connect('supportedMessagingContentTypes', [
+        'text/plain',
+        'text/markdown',
+        'application/vnd.amazonaws.connect.message.interactive',
+        'application/vnd.amazonaws.connect.message.interactive.response'
+      ]);
+
+      // Custom Launcher Button styling
+      amazon_connect('styles', {
+        iconType: 'CHAT',
+        openChat: { color: '#ffffff', backgroundColor: '#004085' },
+        closeChat: { color: '#ffffff', backgroundColor: '#004085' }
+      });
+
+      // Custom Chat Window UI styling
+      amazon_connect('customStyles', {
+        global: {
+          frameWidth: '380px',
+          frameHeight: '620px',
+          typeface: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+        },
+        header: {
+          headerTextColor: '#ffffff',
+          headerBackgroundColor: '#004085'
+        },
+        transcript: {
+          customerChatBubbleColor: '#0056b3',
+          agentChatBubbleColor: '#f0f4f8'
+        },
+        footer: {
+          buttonBackgroundColor: '#004085'
+        }
+      });
+    }
+  </script>
+
+  <!-- Prototype Helper Scripts -->
+  <script src="amazon-connect-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
