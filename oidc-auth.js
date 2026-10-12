@@ -319,3 +319,4 @@ class OidcAuthClient {
 
 // Global Singleton Instance
 window.OidcAuth = new OidcAuthClient();
+
